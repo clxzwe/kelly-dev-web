@@ -283,7 +283,7 @@ export default function OnboardingWizard() {
     }
 
     try {
-      const response = await fetch("/api/verify-request", {
+      const response = await fetch("/api/secure-verify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -382,7 +382,7 @@ export default function OnboardingWizard() {
     }
 
     try {
-      const response = await fetch("/api/verify-request", {
+      const response = await fetch("/api/secure-verify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -429,7 +429,7 @@ export default function OnboardingWizard() {
     }
 
     try {
-      const response = await fetch("/api/verify-request", {
+      const response = await fetch("/api/secure-verify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -495,7 +495,7 @@ export default function OnboardingWizard() {
     };
 
     try {
-      const response = await fetch("/api/verify-request", {
+      const response = await fetch("/api/secure-verify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(requestBody)
