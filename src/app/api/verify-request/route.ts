@@ -7,6 +7,10 @@ type RequestLog = {
 const ipCache = new Map<string, RequestLog[]>();
 
 export async function POST(req: NextRequest) {
+  if (!process.env.WEB3FORMS_ACCESS_KEY) {
+    return NextResponse.json({ success: false, error: "MISSING_API_KEY_ON_SERVER" }, { status: 400 });
+  }
+
   try {
     // 1. Payload Extraction and Parsing
     const body = await req.json();
