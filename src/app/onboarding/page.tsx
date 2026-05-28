@@ -47,6 +47,26 @@ export default function OnboardingWizard() {
   const [activeOtp, setActiveOtp] = useState('');
   const [qSubStep, setQSubStep] = useState(1);
   
+  const [isCooldown, setIsCooldown] = useState(false);
+  const [countdown, setCountdown] = useState(0);
+
+  // Active numerical tick countdown timer for resend cooldown
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (isCooldown && countdown > 0) {
+      interval = setInterval(() => {
+        setCountdown(prev => {
+          if (prev <= 1) {
+            setIsCooldown(false);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [isCooldown, countdown]);
+
   const [error, setError] = useState('');
   const [track, setTrack] = useState<'dev' | 'marketer' | ''>('');
   const [isTrackExplicit, setIsTrackExplicit] = useState(false);
@@ -223,33 +243,25 @@ export default function OnboardingWizard() {
     const generatedPin = Math.floor(100000 + Math.random() * 900000).toString();
     setActiveOtp(generatedPin);
 
-    // Package transmission payload using Web3Forms
-    const otpPayload = new FormData();
-    otpPayload.append("access_key", "2c64c122-c505-4342-a149-5f02503d659e");
-    otpPayload.append("email", formData.email);
-    otpPayload.append("subject", "KELLY NETWORK - Verification Action Required");
-    otpPayload.append("from_name", "Kelly Security Protocol");
-    otpPayload.append("message", `
-ATTENTION RECRUIT OPERATOR,
-
-Your dynamic 6-digit Kelly Network security verification pin code is:
-
-[ ${generatedPin} ]
-
-Enter this pin on the secure onboarding vector screen to unlock direct platform channel credentials.
-
-- KELLY NETWORK CORE ARCHITECTURE
-`);
-
     try {
-      const response = await fetch("https://api.web3forms.com/submit", {
+      const response = await fetch("/api/verify-request", {
         method: "POST",
-        body: otpPayload
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: formData.email,
+          code: generatedPin
+        })
       });
       const result = await response.json();
       
-      if (result.success) {
-        // Send successfully, advance step
+      if (response.status === 429) {
+        setError("⚠️ TOO MANY REQUESTS. PLEASE WAIT 1 MINUTE BEFORE RETRYING.");
+        setIsCooldown(true);
+        setCountdown(60);
+      } else if (result.success) {
+        // Send successfully, advance step and initiate cooldown
+        setIsCooldown(true);
+        setCountdown(60);
         setStep(2); // Jump to OTP entry
         alert("✓ SECURE VERIFICATION PIN ROUTED TO YOUR EMAIL INBOX!");
       } else {
@@ -333,10 +345,53 @@ Enter this pin on the secure onboarding vector screen to unlock direct platform 
       const result = await response.json();
       
       if (response.status === 429) {
-        setError("⚠️ TOO MANY REQUESTS. PLEASE WAIT 5 MINUTES BEFORE RETRYING.");
+        setError("⚠️ TOO MANY REQUESTS. PLEASE WAIT 1 MINUTE BEFORE RETRYING.");
+        setIsCooldown(true);
+        setCountdown(60);
       } else if (result.success) {
+        setIsCooldown(true);
+        setCountdown(60);
         setStep(3); // Go to OTP verification step
         alert("✓ SECURE VERIFICATION PIN ROUTED TO YOUR EMAIL INBOX!");
+      } else {
+        setError(`⚠️ OTP ROUTING LAYER COMPROMISED: ${result.message || 'ACCESS DENIED'}`);
+      }
+    } catch (err) {
+      setError('⚠️ OTP ROUTING LAYER SOCKET ERROR. TRANSMISSION ABORTED.');
+    } finally {
+      setIsSendingOtp(false);
+    }
+  };
+
+  // STAGE C: SECURE RESEND CONTROL FLOW
+  const handleResendOtp = async () => {
+    if (isCooldown) return;
+    
+    setIsSendingOtp(true);
+    setError('');
+
+    const generatedPin = Math.floor(100000 + Math.random() * 900000).toString();
+
+    try {
+      const response = await fetch("/api/verify-request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: formData.email,
+          code: generatedPin
+        })
+      });
+      const result = await response.json();
+      
+      if (response.status === 429) {
+        setError("⚠️ TOO MANY REQUESTS. PLEASE WAIT 1 MINUTE BEFORE RETRYING.");
+        setIsCooldown(true);
+        setCountdown(60);
+      } else if (result.success) {
+        setActiveOtp(generatedPin);
+        setIsCooldown(true);
+        setCountdown(60);
+        alert("✓ A NEW SECURE VERIFICATION PIN HAS BEEN ROUTED TO YOUR EMAIL INBOX!");
       } else {
         setError(`⚠️ OTP ROUTING LAYER COMPROMISED: ${result.message || 'ACCESS DENIED'}`);
       }
@@ -393,7 +448,7 @@ Enter this pin on the secure onboarding vector screen to unlock direct platform 
       
       if (response.status === 429) {
         setSubmissionStatus('default');
-        setError("⚠️ TOO MANY REQUESTS. PLEASE WAIT 5 MINUTES BEFORE RETRYING.");
+        setError("⚠️ TOO MANY REQUESTS. PLEASE WAIT 1 MINUTE BEFORE RETRYING.");
       } else if (result.success) {
         setOtpVerified(true);
         setSubmissionStatus('success');
@@ -1186,6 +1241,24 @@ Enter this pin on the secure onboarding vector screen to unlock direct platform 
                       </div>
                       <div className="text-center font-sans text-xs sm:text-sm tracking-tight text-zinc-700 font-medium">
                         Enter the 6-digit code sent to your email.
+                      </div>
+                      
+                      {/* Resend OTP Cooldown and Control Interface */}
+                      <div className="text-center mt-3 h-6 flex items-center justify-center">
+                        {isCooldown ? (
+                          <span className="font-mono text-xs sm:text-sm text-zinc-500 font-bold uppercase tracking-wider select-none">
+                            Resend code in {countdown} seconds...
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={handleResendOtp}
+                            disabled={isSendingOtp}
+                            className="font-space-900 text-xs sm:text-sm text-black underline decoration-2 hover:text-[#C4B5FD] transition-colors uppercase tracking-wider cursor-pointer focus:outline-none"
+                          >
+                            Didn't receive a code? Try Resending ➔
+                          </button>
+                        )}
                       </div>
                     </div>
 

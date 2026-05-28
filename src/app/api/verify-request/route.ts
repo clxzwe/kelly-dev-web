@@ -8,7 +8,22 @@ const ipCache = new Map<string, RequestLog[]>();
 
 export async function POST(req: NextRequest) {
   try {
-    // 1. IP-Based Rate Limiting
+    // 1. Payload Extraction and Parsing
+    const body = await req.json();
+    const { email, code, isFinalSubmit, ...registrationDetails } = body;
+
+    // 2. Cookie-Based Rate Limiting (Verification Cooldown)
+    if (!isFinalSubmit) {
+      const cooldownCookie = req.cookies.get('verification_cooldown');
+      if (cooldownCookie) {
+        return NextResponse.json(
+          { success: false, error: 'RATE_LIMITED' },
+          { status: 429 }
+        );
+      }
+    }
+
+    // 3. IP-Based Rate Limiting
     const ip = req.headers.get('x-forwarded-for') || '127.0.0.1';
     const now = Date.now();
     const threeMinutes = 3 * 60 * 1000;
@@ -25,10 +40,6 @@ export async function POST(req: NextRequest) {
 
     recentLogs.push({ timestamp: now });
     ipCache.set(ip, recentLogs);
-
-    // 2. Payload Extraction and Parsing
-    const body = await req.json();
-    const { email, code, isFinalSubmit, ...registrationDetails } = body;
 
     // 3. Payload Validation & Sanitization
     if (!email || typeof email !== 'string') {
@@ -168,7 +179,17 @@ Enter this pin on the secure onboarding vector screen to unlock direct platform 
       }
       // ── END DISCORD ALERT STREAM ─────────────────────────────────────────
 
-      return NextResponse.json({ success: true, message: 'Request processed successfully' });
+      const res = NextResponse.json({ success: true, message: 'Request processed successfully' });
+      if (!isFinalSubmit) {
+        res.cookies.set('verification_cooldown', 'true', {
+          maxAge: 60,
+          path: '/',
+          httpOnly: true,
+          secure: true,
+          sameSite: 'strict',
+        });
+      }
+      return res;
     } else {
       return NextResponse.json({ success: false, message: result.message || 'Web3Forms API rejected request' }, { status: 400 });
     }
