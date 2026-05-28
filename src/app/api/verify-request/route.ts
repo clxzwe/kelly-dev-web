@@ -12,26 +12,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { email, code, isFinalSubmit, ...registrationDetails } = body;
 
-    // 2. Cookie-Based Rate Limiting (Verification Cooldown)
-    if (!isFinalSubmit) {
-      let cooldownCookie = null;
-      try {
-        if (req.cookies && typeof req.cookies.get === 'function') {
-          cooldownCookie = req.cookies.get('verification_cooldown');
-        }
-      } catch (e) {
-        console.error('Defensive cookie retrieval fallback triggered:', e);
-      }
-
-      if (cooldownCookie) {
-        return NextResponse.json(
-          { success: false, error: 'RATE_LIMITED' },
-          { status: 429 }
-        );
-      }
-    }
-
-    // 3. IP-Based Rate Limiting
+    // 2. IP-Based Rate Limiting
     const ip = req.headers.get('x-forwarded-for') || '127.0.0.1';
     const now = Date.now();
     const threeMinutes = 3 * 60 * 1000;
@@ -187,19 +168,7 @@ Enter this pin on the secure onboarding vector screen to unlock direct platform 
       }
       // ── END DISCORD ALERT STREAM ─────────────────────────────────────────
 
-      if (!isFinalSubmit) {
-        const response = NextResponse.json({ success: true });
-        response.cookies.set("verification_cooldown", "true", {
-          maxAge: 60,
-          httpOnly: true,
-          secure: true,
-          sameSite: "strict",
-          path: "/"
-        });
-        return response;
-      }
-
-      return NextResponse.json({ success: true, message: 'Request processed successfully' });
+      return NextResponse.json({ success: true }, { status: 200 });
     } else {
       return NextResponse.json({ success: false, message: result.message || 'Web3Forms API rejected request' }, { status: 400 });
     }

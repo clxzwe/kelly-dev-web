@@ -67,6 +67,36 @@ export default function OnboardingWizard() {
     return () => clearInterval(interval);
   }, [isCooldown, countdown]);
 
+  // Robust localStorage rate-limiting lock check
+  const checkRateLimit = (): boolean => {
+    if (typeof window === 'undefined') return false;
+    try {
+      const lockTimeStr = localStorage.getItem('otp_timestamp_lock');
+      if (lockTimeStr) {
+        const lockTime = parseInt(lockTimeStr, 10);
+        if (!isNaN(lockTime)) {
+          const delta = Date.now() - lockTime;
+          if (delta >= 0 && delta < 60000) {
+            const remaining = Math.ceil((60000 - delta) / 1000);
+            if (remaining > 0) {
+              setIsCooldown(true);
+              setCountdown(remaining);
+              return true;
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.error('Defensive checkRateLimit error:', e);
+    }
+    return false;
+  };
+
+  // Check rate limit lock on page load/mount
+  useEffect(() => {
+    checkRateLimit();
+  }, []);
+
   const [error, setError] = useState('');
   const [track, setTrack] = useState<'dev' | 'marketer' | ''>('');
   const [isTrackExplicit, setIsTrackExplicit] = useState(false);
@@ -236,12 +266,21 @@ export default function OnboardingWizard() {
       return;
     }
 
+    if (checkRateLimit()) {
+      setError("⚠️ TOO MANY REQUESTS. PLEASE WAIT 1 MINUTE BEFORE RETRYING.");
+      return;
+    }
+
     setIsSendingOtp(true);
     setError('');
 
     // Generate dynamic 6-digit verification code
     const generatedPin = Math.floor(100000 + Math.random() * 900000).toString();
     setActiveOtp(generatedPin);
+
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('otp_timestamp_lock', Date.now().toString());
+    }
 
     try {
       const response = await fetch("/api/verify-request", {
@@ -326,12 +365,21 @@ export default function OnboardingWizard() {
       return;
     }
 
+    if (checkRateLimit()) {
+      setError("⚠️ TOO MANY REQUESTS. PLEASE WAIT 1 MINUTE BEFORE RETRYING.");
+      return;
+    }
+
     setIsSendingOtp(true);
     setError('');
 
     // Generate dynamic 6-digit verification code
     const generatedPin = Math.floor(100000 + Math.random() * 900000).toString();
     setActiveOtp(generatedPin);
+
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('otp_timestamp_lock', Date.now().toString());
+    }
 
     try {
       const response = await fetch("/api/verify-request", {
@@ -366,11 +414,19 @@ export default function OnboardingWizard() {
   // STAGE C: SECURE RESEND CONTROL FLOW
   const handleResendOtp = async () => {
     if (isCooldown) return;
+    if (checkRateLimit()) {
+      setError("⚠️ TOO MANY REQUESTS. PLEASE WAIT 1 MINUTE BEFORE RETRYING.");
+      return;
+    }
     
     setIsSendingOtp(true);
     setError('');
 
     const generatedPin = Math.floor(100000 + Math.random() * 900000).toString();
+
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('otp_timestamp_lock', Date.now().toString());
+    }
 
     try {
       const response = await fetch("/api/verify-request", {
