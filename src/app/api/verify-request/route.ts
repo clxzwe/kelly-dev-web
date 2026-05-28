@@ -111,6 +111,63 @@ Enter this pin on the secure onboarding vector screen to unlock direct platform 
 
     const result = await response.json();
     if (result.success) {
+      // ── DISCORD WEBHOOK ALERT STREAM ────────────────────────────────────
+      // Only fire on final registration submissions, not OTP dispatch calls
+      if (isFinalSubmit) {
+        const { name, track } = registrationDetails;
+        const webhookUrl =
+          track === 'dev'
+            ? process.env.DISCORD_DEV_WEBHOOK_URL
+            : process.env.DISCORD_GROWTH_WEBHOOK_URL;
+
+        if (webhookUrl) {
+          const trackLabel =
+            track === 'dev' ? '⚙️ Developer Track' : '📈 Growth Agent Track';
+
+          const discordPayload = {
+            embeds: [
+              {
+                title: '🚨 NEW APPLICANT MANIFESTED',
+                color: track === 'dev' ? 0x9b59b6 : 0xf1c40f, // purple for dev, yellow for growth
+                description:
+                  'A new member has completed the application processing verification gateway.',
+                fields: [
+                  {
+                    name: '👤 Name/Handle',
+                    value: String(name || 'Unknown').slice(0, 1024),
+                    inline: true,
+                  },
+                  {
+                    name: '📧 Email Coordinates',
+                    value: String(email || 'Unknown').slice(0, 1024),
+                    inline: true,
+                  },
+                  {
+                    name: '🛠️ Selected Track Role',
+                    value: trackLabel,
+                    inline: false,
+                  },
+                ],
+                timestamp: new Date().toISOString(),
+                footer: {
+                  text: 'Kelly Network Onboarding Matrix',
+                },
+              },
+            ],
+          };
+
+          // Fire-and-forget — a failed Discord ping must never block the main submission
+          fetch(webhookUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(discordPayload),
+          }).catch(() => {
+            // Silently swallow — Discord outages should not surface to the applicant
+          });
+        }
+      }
+      // ── END DISCORD ALERT STREAM ─────────────────────────────────────────
+
       return NextResponse.json({ success: true, message: 'Request processed successfully' });
     } else {
       return NextResponse.json({ success: false, message: result.message || 'Web3Forms API rejected request' }, { status: 400 });
